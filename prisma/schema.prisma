@@ -1,0 +1,546 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- USER & AUTHENTICATION MODELS ---
+
+// Represents an application user, supporting both password and OAuth authentication.
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  username      String    @unique
+  firstName     String?
+  lastName      String?
+  avatar        String?   // URL to the user's profile picture
+  isEmailVerified Boolean @default(false)
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  timezone      String    @default("UTC")
+  locale        String    @default("en")
+  
+  // Nullable for OAuth-only users
+  password      String?
+  
+  // Tokens for email verification and password reset flows
+  emailVerificationToken String?
+  emailVerificationExpiresAt DateTime?
+  passwordResetToken String?
+  passwordResetExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  accounts         Account[]
+  sessions         Session[]
+  workspaceMembers WorkspaceMember[]
+  createdCards     Card[]            @relation("CardCreator")
+  assignedCards    Card[]            @relation("CardAssignee")
+  comments         Comment[]
+  activities       Activity[]
+  notifications    Notification[]
+  attachments      Attachment[]
+
+  @@index([email])
+  @@index([username])
+  @@index([isActive])
+  @@index([lastLoginAt])
+  @@map("users")
+}
+
+// Stores OAuth account information linked to a user (e.g., Google, GitHub).
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String  // e.g., "oauth", "email"
+  provider          String  // e.g., "google", "github"
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+// Manages user login sessions for stateful authentication.
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  userAgent    String?
+  ipAddress    String?
+  isActive     Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expires])
+  @@index([sessionToken])
+  @@map("sessions")
+}
+
+
+// --- WORKSPACE & COLLABORATION MODELS ---
+
+// Represents a team or organization, acting as a container for boards and members.
+model Workspace {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  slug        String  @unique // URL-friendly identifier for the workspace
+  avatar      String?
+  isPersonal  Boolean @default(false) // Indicates if this is a user's personal, default workspace
+  
+  // Stores workspace-level preferences as a JSON object
+  settings    Json?
+  
+  // Manages subscription plan details and limits
+  planType    PlanType @default(FREE)
+  maxMembers  Int      @default(10)
+  maxBoards   Int      @default(5)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  members       WorkspaceMember[]
+  boards        Board[]
+  invitations   WorkspaceInvitation[]
+
+  @@index([slug])
+  @@index([isPersonal])
+  @@index([planType])
+  @@map("workspaces")
+}
+
+// Junction table defining a user's role and permissions within a workspace.
+model WorkspaceMember {
+  id   String @id @default(cuid())
+  role WorkspaceRole @default(MEMBER)
+  
+  // Granular permissions (can be expanded later)
+  canCreateBoards Boolean @default(true)
+  canInviteMembers Boolean @default(false)
+  canManageWorkspace Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId      String
+  workspaceId String
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([role])
+  // Optimizes fetching members by role within a workspace (e.g., find all admins).
+  @@index([workspaceId, role])
+  @@map("workspace_members")
+}
+
+// Tracks invitations sent to users to join a workspace.
+model WorkspaceInvitation {
+  id          String @id @default(cuid())
+  email       String
+  role        WorkspaceRole @default(MEMBER)
+  token       String @unique
+  isAccepted  Boolean @default(false)
+  expiresAt   DateTime
+  
+  invitedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // Prevents sending duplicate invitations to the same email for the same workspace.
+  @@index([email, workspaceId])
+  @@index([token])
+  @@index([workspaceId])
+  @@index([expiresAt])
+  @@map("workspace_invitations")
+}
+
+
+// --- KANBAN CORE MODELS ---
+
+// Represents a project board, the main canvas for lists and cards.
+model Board {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  color       String? // Hex color for board theming
+  background  String? // URL for a background image or pattern
+  isFavorite  Boolean @default(false)
+  isArchived  Boolean @default(false)
+  isTemplate  Boolean @default(false)
+  
+  visibility  BoardVisibility @default(WORKSPACE)
+  settings    Json?           // Stores board-specific preferences as JSON
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  // Relations
+  lists         List[]
+  labels        Label[]
+  activities    Activity[]
+  notifications Notification[]
+
+  @@index([workspaceId])
+  @@index([visibility])
+  // Optimizes filtering for favorite or archived boards within a workspace.
+  @@index([workspaceId, isFavorite])
+  @@index([workspaceId, isArchived])
+  // Optimizes sorting boards by creation date on the main dashboard.
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("boards")
+}
+
+// Represents a vertical column on a board (e.g., "To Do", "In Progress", "Done").
+model List {
+  id         String  @id @default(cuid())
+  name       String
+  position   Float   // Floating-point number for drag-and-drop ordering.
+  isArchived Boolean @default(false)
+  
+  wipLimit   Int?    // Optional Work-in-Progress limit for the list.
+  isCollapsed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  boardId String
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  // Relations
+  cards Card[]
+
+  @@index([boardId])
+  // CRITICAL: Speeds up fetching lists in their correct, user-defined order.
+  @@index([boardId, position])
+  @@map("lists")
+}
+
+// Represents an individual task or item within a list.
+model Card {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  position    Float     // Floating-point number for drag-and-drop ordering within a list.
+  dueDate     DateTime?
+  startDate   DateTime?
+  isArchived  Boolean   @default(false)
+  coverImage  String?
+  
+  // Optional metadata for advanced project management
+  priority    Priority  @default(MEDIUM)
+  complexity  Int?      // e.g., Story points
+  estimatedHours Float?
+  actualHours    Float?
+  
+  // Simple checklist flag; for complex checklists, a separate model would be better.
+  checklist   Boolean @default(false) 
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  listId      String
+  creatorId   String
+  assigneeId  String?
+
+  // Relations
+  list        List           @relation(fields: [listId], references: [id], onDelete: Cascade)
+  creator     User           @relation("CardCreator", fields: [creatorId], references: [id])
+  assignee    User?          @relation("CardAssignee", fields: [assigneeId], references: [id])
+  comments    Comment[]
+  attachments Attachment[]
+  cardLabels  CardLabel[]
+  activities  Activity[]
+
+  @@index([listId])
+  @@index([assigneeId])
+  @@index([dueDate])
+  // CRITICAL: Speeds up fetching cards in their correct, user-defined order within a list.
+  @@index([listId, position])
+  // Optimizes filtering for a user's assigned cards ("My Tasks"), often sorted by due date.
+  @@index([assigneeId, dueDate])
+  // Optimizes filtering for archived cards within a list.
+  @@index([listId, isArchived])
+  // Optimizes filtering cards by priority within a list.
+  @@index([listId, priority])
+  // Optimizes sorting cards by creation date.
+  @@index([listId, createdAt(sort: Desc)])
+  @@map("cards")
+}
+
+
+// --- SUPPORTING MODELS ---
+
+// Represents a colored label for categorizing cards.
+model Label {
+  id    String @id @default(cuid())
+  name  String
+  color String // Hex color string
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  boardId String
+  board      Board       @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  // Relations
+  cardLabels CardLabel[]
+
+  @@index([boardId])
+  // Enforces data integrity by preventing duplicate label names within the same board.
+  @@unique([boardId, name])
+  @@map("labels")
+}
+
+// Junction table for the many-to-many relationship between Cards and Labels.
+model CardLabel {
+  id String @id @default(cuid())
+
+  cardId  String
+  labelId String
+
+  card  Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, labelId])
+  @@index([cardId])
+  @@index([labelId])
+  @@map("card_labels")
+}
+
+// Represents a user-posted comment on a card.
+model Comment {
+  id      String @id @default(cuid())
+  content String
+  
+  mentions String[] // Array of user IDs mentioned in the comment
+  reactions Json?   // e.g., { "👍": ["user_id1", "user_id2"] }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cardId String
+  userId String
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  // Speeds up fetching comments for a card, sorted chronologically.
+  @@index([cardId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("comments")
+}
+
+// Represents a file attached to a card.
+model Attachment {
+  id       String @id @default(cuid())
+  filename String
+  fileUrl  String
+  fileSize Int    // Size in bytes
+  mimeType String
+  
+  isImage  Boolean @default(false)
+  width    Int?
+  height   Int?
+  
+  uploadedById String
+
+  createdAt DateTime @default(now())
+
+  cardId String
+  card       Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([cardId])
+  @@index([uploadedById])
+  @@map("attachments")
+}
+
+// Represents a notification sent to a user.
+model Notification {
+  id       String           @id @default(cuid())
+  type     NotificationType
+  title    String
+  message  String
+  isRead   Boolean          @default(false)
+  
+  // Stores additional context, e.g., { "cardId": "...", "fromUser": "..." }
+  data     Json?
+  
+  createdAt DateTime @default(now())
+
+  userId  String
+  boardId String?
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  board Board? @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  // CRITICAL: Optimizes fetching a user's notifications, newest first.
+  @@index([userId, createdAt(sort: Desc)])
+  // Optimizes fetching a user's unread notifications for the notification bell count.
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+// Tracks all significant actions for an audit trail. This table can grow very large.
+model Activity {
+  id          String       @id @default(cuid())
+  action      ActivityType
+  description String       // Human-readable description, e.g., "John Doe moved card 'X' from 'To Do' to 'In Progress'"
+  metadata    Json?        // Stores contextual data, e.g., { "fromListId": "...", "toListId": "..." }
+  
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt DateTime @default(now())
+
+  userId  String
+  boardId String
+  cardId  String?
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  card  Card?  @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  // CRITICAL: This table grows fast. These indexes are essential for performance.
+  // Primary query: Fetching all activities for a board, newest first.
+  @@index([boardId, createdAt(sort: Desc)])
+  // Secondary query: Fetching all activities for a specific card.
+  @@index([cardId, createdAt(sort: Desc)])
+  // Tertiary query: Fetching all activities performed by a specific user.
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action])
+  @@map("activities")
+}
+
+// --- ENUMS ---
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum BoardVisibility {
+  WORKSPACE
+  PRIVATE
+  PUBLIC
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum PlanType {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum ActivityType {
+  CARD_CREATED
+  CARD_UPDATED
+  CARD_MOVED
+  CARD_DELETED
+  CARD_ARCHIVED
+  CARD_ASSIGNED
+  CARD_UNASSIGNED
+  
+  LIST_CREATED
+  LIST_UPDATED
+  LIST_MOVED
+  LIST_DELETED
+  LIST_ARCHIVED
+  
+  COMMENT_ADDED
+  COMMENT_UPDATED
+  COMMENT_DELETED
+  
+  LABEL_CREATED
+  LABEL_UPDATED
+  LABEL_DELETED
+  LABEL_ASSIGNED
+  LABEL_UNASSIGNED
+  
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  MEMBER_ROLE_CHANGED
+  
+  WORKSPACE_CREATED
+  WORKSPACE_UPDATED
+  WORKSPACE_DELETED
+  
+  BOARD_CREATED
+  BOARD_UPDATED
+  BOARD_DELETED
+  BOARD_ARCHIVED
+  BOARD_FAVORITED
+  BOARD_UNFAVORITED
+  
+  ATTACHMENT_ADDED
+  ATTACHMENT_DELETED
+  
+  CHECKLIST_ITEM_CHECKED
+  CHECKLIST_ITEM_UNCHECKED
+  
+  TIME_ENTRY_STARTED
+  TIME_ENTRY_STOPPED
+  TIME_ENTRY_UPDATED
+}
+
+enum NotificationType {
+  CARD_ASSIGNED
+  CARD_DUE_SOON
+  CARD_OVERDUE
+  COMMENT_MENTION
+  MEMBER_JOINED
+  BOARD_SHARED
+  WORKSPACE_INVITATION
+}
