@@ -22,6 +22,8 @@ import { ResponseMessage } from 'src/common/decorators/response-message.decorato
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
 import { User } from 'generated/prisma';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -137,5 +139,21 @@ export class AuthController {
   @Get('profile')
   getProfile(@GetUser() user: User) {
     return user;
+  }
+
+  @ResponseMessage(
+    "If an account with that email exists, we've sent instructions to reset your password.",
+  )
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  @ResponseMessage('Your password has been successfully reset.')
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(resetPasswordDto);
   }
 }

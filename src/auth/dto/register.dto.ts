@@ -1,5 +1,6 @@
 import { IsEmail, IsString, Matches, IsNotEmpty } from 'class-validator';
 import { IsValidUsername } from 'src/common/decorators/is-valid-username.decorator';
+import { IsStrongPassword } from 'src/common/decorators/is-strong-password.decorator';
 
 export class RegisterDto {
   @IsNotEmpty()
@@ -14,10 +15,6 @@ export class RegisterDto {
   username: string;
 
   @IsNotEmpty()
-  @IsString()
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])\S{8,}$/, {
-    message:
-      'Password is too weak. It must be at least 8 characters long and contain uppercase, lowercase, number, special character, and no whitespace.',
-  })
+  @IsStrongPassword()
   password: string;
 }

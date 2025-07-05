@@ -33,7 +33,6 @@ export class IsValidUsernameConstraint implements ValidatorConstraintInterface {
   }
 }
 
-// Langkah 2: Buat Decorator Function-nya
 export function IsValidUsername(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
