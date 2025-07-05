@@ -29,7 +29,8 @@ model User {
   lastLoginAt   DateTime?
   timezone      String    @default("UTC")
   locale        String    @default("en")
-  
+  hashedRefreshToken String?
+
   // Nullable for OAuth-only users
   password      String?
   
