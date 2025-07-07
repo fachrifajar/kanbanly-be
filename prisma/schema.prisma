@@ -53,6 +53,7 @@ model User {
   activities       Activity[]
   notifications    Notification[]
   attachments      Attachment[]
+  boardMembers BoardMember[]
 
   @@index([email])
   @@index([username])
@@ -222,6 +223,7 @@ model Board {
   labels        Label[]
   activities    Activity[]
   notifications Notification[]
+  members BoardMember[]
 
   @@index([workspaceId])
   @@index([visibility])
@@ -231,6 +233,19 @@ model Board {
   // Optimizes sorting boards by creation date on the main dashboard.
   @@index([workspaceId, createdAt(sort: Desc)])
   @@map("boards")
+}
+
+model BoardMember {
+  id      String @id @default(cuid())
+  boardId String
+  userId  String
+  role    WorkspaceRole @default(MEMBER) 
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId]) 
+  @@map("board_members")
 }
 
 // Represents a vertical column on a board (e.g., "To Do", "In Progress", "Done").
@@ -439,11 +454,11 @@ model Activity {
   createdAt DateTime @default(now())
 
   userId  String
-  boardId String
+  boardId String?
   cardId  String?
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  board Board? @relation(fields: [boardId], references: [id], onDelete: Cascade)
   card  Card?  @relation(fields: [cardId], references: [id], onDelete: SetNull)
 
   // CRITICAL: This table grows fast. These indexes are essential for performance.

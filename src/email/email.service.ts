@@ -34,7 +34,7 @@ export class EmailService implements OnModuleInit {
       },
     });
 
-    console.log('Brevo SMTP transporter configured and ready.');
+    // console.log('Brevo SMTP transporter configured and ready.');
   }
 
   async sendUserVerificationEmail(user: User, token: string) {
