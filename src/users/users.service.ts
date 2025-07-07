@@ -50,11 +50,15 @@ export class UsersService {
     });
   }
 
-  async updateLastLogin(userId: string): Promise<User> {
-    return this.prisma.user.update({
+  async updateLoginData(
+    userId: string,
+    hashedRefreshToken: string,
+  ): Promise<void> {
+    await this.prisma.user.update({
       where: { id: userId },
       data: {
         lastLoginAt: new Date(),
+        hashedRefreshToken: hashedRefreshToken,
       },
     });
   }
@@ -77,6 +81,40 @@ export class UsersService {
     await this.prisma.user.update({
       where: { id: userId },
       data: { hashedRefreshToken: null },
+    });
+  }
+
+  async setPasswordResetToken(
+    userId: string,
+    token: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordResetToken: token,
+        passwordResetExpiresAt: expiresAt,
+      },
+    });
+  }
+
+  async findByPasswordResetToken(token: string): Promise<User | null> {
+    return this.prisma.user.findFirst({
+      where: { passwordResetToken: token },
+    });
+  }
+
+  async updateUserPassword(
+    userId: string,
+    newHashedPassword: string,
+  ): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        password: newHashedPassword,
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+      },
     });
   }
 }

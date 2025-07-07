@@ -7,6 +7,8 @@ import { UsersModule } from './users/users.module';
 import { EmailModule } from './email/email.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { WorkspacesModule } from './workspaces/workspaces.module';
+import { ActivitiesModule } from './activities/activities.module';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { APP_GUARD } from '@nestjs/core';
         limit: 100,
       },
     ]),
+    WorkspacesModule,
+    ActivitiesModule,
   ],
   controllers: [AppController],
   providers: [

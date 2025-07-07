@@ -17,6 +17,8 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { UserResponseDto } from 'src/users/dto/user-response.dto';
 import { ConfigService } from '@nestjs/config';
 import { User } from 'generated/prisma';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -45,8 +47,7 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(password, 12);
     const user = await this.usersService.create({
-      email,
-      username,
+      ...registerDto,
       password: hashedPassword,
       emailVerificationToken,
       emailVerificationExpiresAt,
@@ -139,14 +140,13 @@ export class AuthService {
     }
   }
 
-  private async _generateTokens(user: User) {
-    const payload = { sub: user.id, email: user.email };
+  private async _generateAndSaveTokens(user: User) {
+    const accessTokenPayload = { sub: user.id, email: user.email };
+    const refreshTokenPayload = { sub: user.id };
 
     const [accessToken, refreshToken] = await Promise.all([
-      // main token
-      this.jwtService.signAsync(payload),
-      // refresh token
-      this.jwtService.signAsync(payload, {
+      this.jwtService.signAsync(accessTokenPayload),
+      this.jwtService.signAsync(refreshTokenPayload, {
         secret: this.configService.get<string>('JWT_REFRESH_TOKEN_SECRET'),
         expiresIn: this.configService.get<string>(
           'JWT_REFRESH_TOKEN_EXPIRATION_TIME',
@@ -154,18 +154,14 @@ export class AuthService {
       }),
     ]);
 
-    return {
-      accessToken,
-      refreshToken,
-      user: new UserResponseDto(user),
-    };
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 12);
+
+    await this.usersService.updateLoginData(user.id, hashedRefreshToken);
+
+    return { accessToken, refreshToken };
   }
 
-  async login(loginDto: LoginDto): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    user: UserResponseDto;
-  }> {
+  async login(loginDto: LoginDto) {
     const user = await this.usersService.findByEmail(loginDto.email);
     if (!user || !user.password)
       throw new UnauthorizedException('Invalid credentials.');
@@ -178,9 +174,7 @@ export class AuthService {
     if (!isPasswordMatching)
       throw new UnauthorizedException('Invalid credentials.');
 
-    await this.usersService.updateLastLogin(user.id);
-    const tokens = await this._generateTokens(user);
-    await this.usersService.updateRefreshToken(user.id, tokens.refreshToken);
+    const tokens = await this._generateAndSaveTokens(user);
 
     return {
       accessToken: tokens.accessToken,
@@ -195,21 +189,67 @@ export class AuthService {
 
   async refreshTokens(userId: string, refreshToken: string) {
     const user = await this.usersService.findById(userId);
-    if (!user || !user.hashedRefreshToken) {
+    if (!user || !user.hashedRefreshToken)
       throw new UnauthorizedException('Access Denied');
-    }
 
     const isRefreshTokenMatching = await bcrypt.compare(
       refreshToken,
       user.hashedRefreshToken,
     );
-
-    if (!isRefreshTokenMatching) {
+    if (!isRefreshTokenMatching)
       throw new UnauthorizedException('Access Denied');
+
+    const tokens = await this._generateAndSaveTokens(user);
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<void> {
+    const user = await this.usersService.findByEmail(forgotPasswordDto.email);
+
+    if (!user) return;
+    if (!user.isEmailVerified)
+      throw new BadRequestException('Email not verified. Please verify first.');
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiresAt = new Date(Date.now() + 3600000); // 1 hour
+
+    await this.usersService.setPasswordResetToken(
+      user.id,
+      resetToken,
+      resetTokenExpiresAt,
+    );
+    await this.emailService.sendPasswordResetEmail(user, resetToken);
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<void> {
+    const { token, password } = resetPasswordDto;
+
+    const user = await this.usersService.findByPasswordResetToken(token);
+
+    if (
+      !user ||
+      !user.passwordResetExpiresAt ||
+      new Date() > user.passwordResetExpiresAt ||
+      !user.password
+    ) {
+      throw new BadRequestException('Invalid or expired password reset token.');
     }
 
-    const tokens = await this._generateTokens(user);
-    await this.usersService.updateRefreshToken(user.id, tokens.refreshToken);
-    return tokens;
+    const isPasswordMatching = await bcrypt.compare(
+      resetPasswordDto.password,
+      user.password,
+    );
+
+    if (isPasswordMatching)
+      throw new UnauthorizedException(
+        'Password cannot be the same as the old one.',
+      );
+
+    const newHashedPassword = await bcrypt.hash(password, 12);
+    await this.usersService.updateUserPassword(user.id, newHashedPassword);
   }
 }
