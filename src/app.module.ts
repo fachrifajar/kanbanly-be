@@ -9,6 +9,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { ActivitiesModule } from './activities/activities.module';
+import { BoardsModule } from './boards/boards.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ActivitiesModule } from './activities/activities.module';
     ]),
     WorkspacesModule,
     ActivitiesModule,
+    BoardsModule,
   ],
   controllers: [AppController],
   providers: [
