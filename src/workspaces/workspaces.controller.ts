@@ -64,7 +64,6 @@ export class WorkspacesController {
   @ResponseMessage('Workspace deleted successfully.')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string, @GetUser() user: User) {
-    console.log({ id, user });
     return this.workspacesService.remove(id, user);
   }
 }

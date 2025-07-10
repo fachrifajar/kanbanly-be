@@ -8,9 +8,8 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
-import { Prisma, WorkspaceRole } from 'generated/prisma';
+import { Prisma, WorkspaceRole, User, ActivityType } from 'generated/prisma';
 import { ActivitiesService } from 'src/activities/activities.service';
-import { User, ActivityType } from 'generated/prisma';
 
 @Injectable()
 export class WorkspacesService {
@@ -23,15 +22,9 @@ export class WorkspacesService {
     const existingWorkspaceWithName = await this.prisma.workspace.findFirst({
       where: {
         name: createWorkspaceDto.name,
-        members: {
-          some: {
-            userId: user.id,
-          },
-        },
+        members: { some: { userId: user.id } },
       },
     });
-
-    // Jika ditemukan, lempar error
     if (existingWorkspaceWithName) {
       throw new ConflictException(
         'You already have a workspace with this name.',
@@ -40,8 +33,8 @@ export class WorkspacesService {
 
     const slug = await this._generateUniqueSlug(createWorkspaceDto.name);
 
-    return this.prisma.$transaction(async (tx) => {
-      const workspace = await tx.workspace.create({
+    const workspace = await this.prisma.$transaction(async (tx) => {
+      const newWorkspace = await tx.workspace.create({
         data: {
           name: createWorkspaceDto.name,
           description: createWorkspaceDto.description,
@@ -51,23 +44,27 @@ export class WorkspacesService {
 
       await tx.workspaceMember.create({
         data: {
-          workspaceId: workspace.id,
+          workspaceId: newWorkspace.id,
           userId: user.id,
           role: WorkspaceRole.OWNER,
         },
       });
 
-      await this.activitiesService.create(
-        {
-          action: ActivityType.WORKSPACE_CREATED,
-          description: `${user.username} created workspace "${workspace.name}"`,
-          user: { connect: { id: user.id } },
+      await this.activitiesService.log({
+        user: user,
+        action: ActivityType.WORKSPACE_CREATED,
+        entity: {
+          id: newWorkspace.id,
+          name: newWorkspace.name,
+          type: 'Workspace',
         },
         tx,
-      );
+      });
 
-      return workspace;
+      return newWorkspace;
     });
+
+    return workspace;
   }
 
   async update(
@@ -76,7 +73,7 @@ export class WorkspacesService {
     updateWorkspaceDto: UpdateWorkspaceDto,
   ) {
     return this.prisma.$transaction(async (tx) => {
-      await this._validateUserRole(workspaceId, user.id, [
+      await this.validateUserRole(workspaceId, user.id, [
         WorkspaceRole.OWNER,
         WorkspaceRole.ADMIN,
       ]);
@@ -101,14 +98,16 @@ export class WorkspacesService {
         data: dataToUpdate,
       });
 
-      await this.activitiesService.create(
-        {
-          action: ActivityType.WORKSPACE_UPDATED,
-          description: `${user.username} updated workspace "${updatedWorkspace.name}"`,
-          user: { connect: { id: user.id } },
+      await this.activitiesService.log({
+        user: user,
+        action: ActivityType.WORKSPACE_UPDATED,
+        entity: {
+          id: updatedWorkspace.id,
+          name: updatedWorkspace.name,
+          type: 'Workspace',
         },
         tx,
-      );
+      });
 
       return updatedWorkspace;
     });
@@ -161,7 +160,7 @@ export class WorkspacesService {
   }
 
   async findOne(workspaceId: string, userId: string) {
-    await this._validateUserIsMember(workspaceId, userId);
+    await this.validateUserIsMember(workspaceId, userId);
 
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
@@ -185,7 +184,7 @@ export class WorkspacesService {
 
   async remove(workspaceId: string, user: User) {
     return this.prisma.$transaction(async (tx) => {
-      await this._validateUserRole(workspaceId, user.id, [WorkspaceRole.OWNER]);
+      await this.validateUserRole(workspaceId, user.id, [WorkspaceRole.OWNER]);
 
       const workspaceToDelete = await tx.workspace.findUnique({
         where: { id: workspaceId },
@@ -197,18 +196,20 @@ export class WorkspacesService {
         where: { id: workspaceId },
       });
 
-      await this.activitiesService.create(
-        {
-          action: ActivityType.WORKSPACE_DELETED,
-          description: `${user.username} deleted workspace "${workspaceToDelete.name}"`,
-          user: { connect: { id: user.id } },
+      await this.activitiesService.log({
+        user: user,
+        action: ActivityType.WORKSPACE_DELETED,
+        entity: {
+          id: workspaceToDelete.id,
+          name: workspaceToDelete.name,
+          type: 'Workspace',
         },
         tx,
-      );
+      });
     });
   }
 
-  private async _validateUserRole(
+  async validateUserRole(
     workspaceId: string,
     userId: string,
     allowedRoles: WorkspaceRole[],
@@ -235,7 +236,7 @@ export class WorkspacesService {
     return member;
   }
 
-  private async _validateUserIsMember(workspaceId: string, userId: string) {
+  async validateUserIsMember(workspaceId: string, userId: string) {
     const member = await this.prisma.workspaceMember.findUnique({
       where: {
         userId_workspaceId: {

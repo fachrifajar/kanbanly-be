@@ -8,5 +8,6 @@ import { ActivitiesModule } from 'src/activities/activities.module';
   imports: [PrismaModule, ActivitiesModule],
   providers: [WorkspacesService],
   controllers: [WorkspacesController],
+  exports: [WorkspacesService],
 })
 export class WorkspacesModule {}
