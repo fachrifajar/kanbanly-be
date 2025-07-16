@@ -17,8 +17,8 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
-    "paths": {
-      "@prisma/client": ["generated/prisma"]
-    }
+    // "paths": {
+    //   "@prisma/client": ["generated/prisma"]
+    // }
   }
 }

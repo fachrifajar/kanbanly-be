@@ -6,7 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { SentMessageInfo } from 'nodemailer';
-import { User } from 'generated/prisma';
+import { User } from '@prisma/client';
 
 @Injectable()
 export class EmailService implements OnModuleInit {

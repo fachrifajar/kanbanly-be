@@ -21,7 +21,7 @@ import { AuthGuard } from '@nestjs/passport';
 // services
 import { WorkspacesService } from './workspaces.service';
 // types
-import { User } from 'generated/prisma';
+import { User } from '@prisma/client';
 
 @Controller('workspaces')
 @UseGuards(AuthGuard('jwt'))

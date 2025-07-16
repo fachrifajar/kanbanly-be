@@ -17,7 +17,7 @@ import { CreateBoardDto } from './dto/create-board.dto';
 import { UpdateBoardDto } from './dto/update-board.dto';
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { ResponseMessage } from '../common/decorators/response-message.decorator';
-import { User } from 'generated/prisma';
+import { User } from '@prisma/client';
 
 @Controller('boards')
 @UseGuards(AuthGuard('jwt'))

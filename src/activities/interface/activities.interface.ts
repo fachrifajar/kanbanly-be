@@ -1,16 +1,28 @@
-import { User, ActivityType, Prisma } from '@prisma/client';
+import { ActivityType, Prisma } from '@prisma/client';
 
-interface LogEntity {
+export interface ActivityContext {
+  workspaceId: string;
+  workspaceName?: string;
   boardId?: string;
-  id: string;
-  name: string;
-  type: 'Workspace' | 'Board' | 'Card' | 'List';
+  boardName?: string;
+  listId?: string;
+  listName?: string;
+  cardId?: string;
+  cardTitle?: string;
+  from?: string;
+  to?: string;
+  targetUserName?: string;
+  labelName?: string;
+  attachmentName?: string;
 }
 
 export interface ActivityLogOptions {
-  user: User;
+  user: {
+    id: string;
+    username: string;
+  };
   action: ActivityType;
-  entity: LogEntity;
+  context: ActivityContext;
+  metadata?: Record<string, any>;
   tx?: Prisma.TransactionClient;
-  context?: { workspaceId?: string };
 }
