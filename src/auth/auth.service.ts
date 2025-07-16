@@ -16,7 +16,7 @@ import { EmailService } from 'src/email/email.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UserResponseDto } from 'src/users/dto/user-response.dto';
 import { ConfigService } from '@nestjs/config';
-import { User } from 'generated/prisma';
+import { User } from '@prisma/client';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 

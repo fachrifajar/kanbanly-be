@@ -21,7 +21,7 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
-import { User } from 'generated/prisma';
+import { User } from '@prisma/client';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 

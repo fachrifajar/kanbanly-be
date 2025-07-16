@@ -13,7 +13,8 @@ import {
   User,
   ActivityType,
   WorkspaceRole,
-} from 'generated/prisma';
+  Prisma,
+} from '@prisma/client';
 
 @Injectable()
 export class BoardsService {
@@ -45,7 +46,11 @@ export class BoardsService {
       await this.activitiesService.log({
         user: user,
         action: ActivityType.BOARD_CREATED,
-        entity: { id: board.id, name: board.name, type: 'Board' },
+        context: {
+          workspaceId: board.workspaceId,
+          boardId: board.id,
+          boardName: board.name,
+        },
         tx,
       });
 
@@ -76,7 +81,7 @@ export class BoardsService {
   }
 
   async findOne(boardId: string, userId: string) {
-    await this._validateBoardAccess(boardId, userId);
+    await this.validateBoardAccess(boardId, userId);
 
     const board = await this.prisma.board.findUnique({
       where: { id: boardId },
@@ -119,7 +124,7 @@ export class BoardsService {
   }
 
   async update(boardId: string, user: User, updateBoardDto: UpdateBoardDto) {
-    const board = await this._validateBoardAccess(boardId, user.id);
+    const board = await this.validateBoardAccess(boardId, user.id);
 
     await this.workspacesService.validateUserRole(board.workspaceId, user.id, [
       WorkspaceRole.OWNER,
@@ -135,11 +140,10 @@ export class BoardsService {
       await this.activitiesService.log({
         user: user,
         action: ActivityType.BOARD_UPDATED,
-        entity: {
-          id: updatedBoard.id,
-          name: updatedBoard.name,
-          type: 'Board',
+        context: {
+          workspaceId: updatedBoard.workspaceId,
           boardId: updatedBoard.id,
+          boardName: updatedBoard.name,
         },
         tx,
       });
@@ -150,7 +154,7 @@ export class BoardsService {
 
   async remove(boardId: string, user: User) {
     return this.prisma.$transaction(async (tx) => {
-      const boardToDelete = await this._validateBoardAccess(boardId, user.id);
+      const boardToDelete = await this.validateBoardAccess(boardId, user.id);
 
       await this.workspacesService.validateUserRole(
         boardToDelete.workspaceId,
@@ -163,21 +167,24 @@ export class BoardsService {
       await this.activitiesService.log({
         user: user,
         action: ActivityType.BOARD_DELETED,
-        entity: {
-          id: boardToDelete.id,
-          name: boardToDelete.name,
-          type: 'Board',
-        },
         context: {
           workspaceId: boardToDelete.workspaceId,
+          boardId: boardToDelete.id,
+          boardName: boardToDelete.name,
         },
         tx,
       });
     });
   }
 
-  private async _validateBoardAccess(boardId: string, userId: string) {
-    const board = await this.prisma.board.findUnique({
+  async validateBoardAccess(
+    boardId: string,
+    userId: string,
+    prismaClient?: Prisma.TransactionClient,
+  ) {
+    const client = prismaClient || this.prisma;
+
+    const board = await client.board.findUnique({
       where: { id: boardId },
     });
 
@@ -192,6 +199,7 @@ export class BoardsService {
     await this.workspacesService.validateUserIsMember(
       board.workspaceId,
       userId,
+      client,
     );
 
     if (board.visibility === 'WORKSPACE') {
@@ -199,7 +207,7 @@ export class BoardsService {
     }
 
     if (board.visibility === 'PRIVATE') {
-      const boardMember = await this.prisma.boardMember.findUnique({
+      const boardMember = await client.boardMember.findUnique({
         where: { boardId_userId: { boardId, userId } },
       });
       if (boardMember) {

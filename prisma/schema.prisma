@@ -6,7 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  // output   = "../generated/prisma"
 }
 
 datasource db {
@@ -135,6 +135,7 @@ model Workspace {
   members       WorkspaceMember[]
   boards        Board[]
   invitations   WorkspaceInvitation[]
+  activities    Activity[]
 
   @@index([slug])
   @@index([isPersonal])
@@ -445,28 +446,25 @@ model Notification {
 model Activity {
   id          String       @id @default(cuid())
   action      ActivityType
-  description String       // Human-readable description, e.g., "John Doe moved card 'X' from 'To Do' to 'In Progress'"
-  metadata    Json?        // Stores contextual data, e.g., { "fromListId": "...", "toListId": "..." }
-  
+  description String
+  metadata    Json?
   ipAddress   String?
   userAgent   String?
 
   createdAt DateTime @default(now())
 
-  userId  String
-  boardId String?
-  cardId  String?
+  userId      String
+  boardId     String?
+  cardId      String?
+  workspaceId String?
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  board Board? @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  card  Card?  @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  board     Board?     @relation(fields: [boardId], references: [id], onDelete: SetNull)
+  card      Card?      @relation(fields: [cardId], references: [id], onDelete: SetNull)
 
-  // CRITICAL: This table grows fast. These indexes are essential for performance.
-  // Primary query: Fetching all activities for a board, newest first.
   @@index([boardId, createdAt(sort: Desc)])
-  // Secondary query: Fetching all activities for a specific card.
   @@index([cardId, createdAt(sort: Desc)])
-  // Tertiary query: Fetching all activities performed by a specific user.
   @@index([userId, createdAt(sort: Desc)])
   @@index([action])
   @@map("activities")
