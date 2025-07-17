@@ -14,7 +14,9 @@ import {
   ActivityType,
   WorkspaceRole,
   Prisma,
+  Board,
 } from '@prisma/client';
+import { buildFieldDiffDeep } from 'src/common/utils/diff.utils';
 
 @Injectable()
 export class BoardsService {
@@ -31,6 +33,16 @@ export class BoardsService {
       WorkspaceRole.OWNER,
       WorkspaceRole.ADMIN,
     ]);
+
+    const boardCount = await this.prisma.board.count({
+      where: {
+        workspaceId,
+      },
+    });
+
+    if (boardCount >= 10) {
+      throw new ForbiddenException('Board limit reached (max 10).');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const board = await tx.board.create({
@@ -50,6 +62,13 @@ export class BoardsService {
           workspaceId: board.workspaceId,
           boardId: board.id,
           boardName: board.name,
+        },
+        metadata: {
+          name: board.name,
+          description: board.description,
+          color: board.color,
+          visibility: board.visibility,
+          id: board.id,
         },
         tx,
       });
@@ -132,10 +151,17 @@ export class BoardsService {
     ]);
 
     return this.prisma.$transaction(async (tx) => {
+      const existingBoard = await tx.board.findUniqueOrThrow({
+        where: { id: boardId },
+      });
+
       const updatedBoard = await tx.board.update({
         where: { id: boardId },
         data: updateBoardDto,
       });
+
+      const fields = Object.keys(updateBoardDto) as (keyof Board)[];
+      const diff = buildFieldDiffDeep(existingBoard, updatedBoard, fields);
 
       await this.activitiesService.log({
         user: user,
@@ -144,6 +170,11 @@ export class BoardsService {
           workspaceId: updatedBoard.workspaceId,
           boardId: updatedBoard.id,
           boardName: updatedBoard.name,
+        },
+        metadata: {
+          fieldChanges: diff,
+          boardId: updatedBoard.id,
+          workspaceId: board.workspaceId,
         },
         tx,
       });
@@ -162,8 +193,6 @@ export class BoardsService {
         [WorkspaceRole.OWNER, WorkspaceRole.ADMIN],
       );
 
-      await tx.board.delete({ where: { id: boardId } });
-
       await this.activitiesService.log({
         user: user,
         action: ActivityType.BOARD_DELETED,
@@ -172,8 +201,15 @@ export class BoardsService {
           boardId: boardToDelete.id,
           boardName: boardToDelete.name,
         },
+        metadata: {
+          boardId: boardToDelete.id,
+          workspaceId: boardToDelete.workspaceId,
+          boardName: boardToDelete.name,
+        },
         tx,
       });
+
+      await tx.board.delete({ where: { id: boardId } });
     });
   }
 

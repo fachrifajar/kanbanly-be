@@ -88,6 +88,7 @@ export class WorkspacesService {
         metadata: {
           name: newWorkspace.name,
           description: newWorkspace.description,
+          id: newWorkspace.id,
         },
         tx,
       });
@@ -149,6 +150,7 @@ export class WorkspacesService {
         },
         metadata: {
           fieldChanges: diff,
+          workspaceId,
         },
         tx,
       });
@@ -242,6 +244,11 @@ export class WorkspacesService {
         context: {
           workspaceId: workspaceToDelete.id,
           workspaceName: workspaceToDelete.name,
+        },
+        metadata: {
+          workspaceId: workspaceToDelete.id,
+          workspaceName: workspaceToDelete.name,
+          workspaceSlug: workspaceToDelete.slug,
         },
         tx,
       });
