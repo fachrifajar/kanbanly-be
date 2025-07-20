@@ -12,6 +12,8 @@ export interface ActivityContext {
   from?: string;
   to?: string;
   targetUserName?: string;
+  targetEmail?: string;
+  targetRole?: string;
   labelName?: string;
   attachmentName?: string;
 }
@@ -19,7 +21,7 @@ export interface ActivityContext {
 export interface ActivityLogOptions {
   user: {
     id: string;
-    username: string;
+    email: string;
   };
   action: ActivityType;
   context: ActivityContext;

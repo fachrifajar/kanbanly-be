@@ -17,7 +17,7 @@ export class ActivitiesService {
     metadata,
     tx,
   }: ActivityLogOptions): Promise<Activity> {
-    const description = this._createDescription(user.username, action, context);
+    const description = this._createDescription(user.email, action, context);
 
     const client: Prisma.TransactionClient | PrismaService = tx || this.prisma;
 
@@ -37,7 +37,7 @@ export class ActivitiesService {
   }
 
   private _createDescription(
-    username: string,
+    email: string,
     action: ActivityType,
     context: ActivityContext,
   ): string {
@@ -53,67 +53,77 @@ export class ActivitiesService {
     switch (action) {
       // WORKSPACE
       case ActivityType.WORKSPACE_CREATED:
-        return `${username} created ${workspace}`;
+        return `${email} created ${workspace}`;
       case ActivityType.WORKSPACE_UPDATED:
-        return `${username} updated ${workspace}`;
+        return `${email} updated ${workspace}`;
       case ActivityType.WORKSPACE_DELETED:
-        return `${username} deleted ${workspace}`;
+        return `${email} deleted ${workspace}`;
 
       // BOARD
       case ActivityType.BOARD_CREATED:
-        return `${username} created ${board}`;
+        return `${email} created ${board}`;
       case ActivityType.BOARD_UPDATED:
-        return `${username} updated ${board}`;
+        return `${email} updated ${board}`;
       case ActivityType.BOARD_DELETED:
-        return `${username} deleted ${board}`;
+        return `${email} deleted ${board}`;
       case ActivityType.BOARD_ARCHIVED:
-        return `${username} archived ${board}`;
+        return `${email} archived ${board}`;
       case ActivityType.BOARD_FAVORITED:
-        return `${username} favorited ${board}`;
+        return `${email} favorited ${board}`;
       case ActivityType.BOARD_UNFAVORITED:
-        return `${username} unfavorited ${board}`;
+        return `${email} unfavorited ${board}`;
 
       // LIST
       case ActivityType.LIST_CREATED:
-        return `${username} created ${list} on ${board}`;
+        return `${email} created ${list} on ${board}`;
       case ActivityType.LIST_UPDATED:
-        return `${username} updated ${list}`;
+        return `${email} updated ${list}`;
       case ActivityType.LIST_MOVED:
-        return `${username} reordered lists on ${board}`;
+        return `${email} reordered lists on ${board}`;
       case ActivityType.LIST_DELETED:
-        return `${username} deleted ${list}`;
+        return `${email} deleted ${list}`;
       case ActivityType.LIST_ARCHIVED:
-        return `${username} archived ${list}`;
+        return `${email} archived ${list}`;
 
       // CARD
       case ActivityType.CARD_CREATED:
-        return `${username} created ${card} in ${list}`;
+        return `${email} created ${card} in ${list}`;
       case ActivityType.CARD_UPDATED:
-        return `${username} updated ${card}`;
+        return `${email} updated ${card}`;
       case ActivityType.CARD_MOVED:
-        return `${username} moved ${card} from list "${context.from || 'unknown'}" to "${context.to || 'unknown'}"`;
+        return `${email} moved ${card} from list "${context.from || 'unknown'}" to "${context.to || 'unknown'}"`;
       case ActivityType.CARD_DELETED:
-        return `${username} deleted ${card}`;
+        return `${email} deleted ${card}`;
       case ActivityType.CARD_ARCHIVED:
-        return `${username} archived ${card}`;
+        return `${email} archived ${card}`;
       case ActivityType.CARD_ASSIGNED:
-        return `${username} assigned ${context.targetUserName || 'someone'} to ${card}`;
+        return `${email} assigned ${context.targetEmail || 'someone'} to ${card}`;
       case ActivityType.CARD_UNASSIGNED:
-        return `${username} unassigned ${context.targetUserName || 'someone'} from ${card}`;
+        return `${email} unassigned ${context.targetEmail || 'someone'} from ${card}`;
 
       // COMMENT
       case ActivityType.COMMENT_ADDED:
-        return `${username} commented on ${card}`;
+        return `${email} commented on ${card}`;
 
       // MEMBER
       case ActivityType.MEMBER_ADDED:
-        return `${username} added ${context.targetUserName || 'someone'} to the workspace`;
+        return `${context.targetEmail || 'someone'} joined the workspace`;
       case ActivityType.MEMBER_REMOVED:
-        return `${username} removed ${context.targetUserName || 'someone'} from the workspace`;
+        return `${email} removed ${context.targetEmail || 'someone'} from the workspace`;
+      case ActivityType.MEMBER_ROLE_CHANGED:
+        return `${email} changed ${context.targetEmail || 'someone'}'s role to ${context.targetRole}`;
+
+      // INVITATION
+      case ActivityType.INVITATION_SENT:
+        return `${email} invited ${context.targetEmail || 'someone'} to the workspace`;
+      case ActivityType.INVITATION_REFRESHED:
+        return `${email} refreshed the invitation ${context.targetEmail} to join the workspace`;
+      case ActivityType.INVITATION_CANCELED:
+        return `${email} canceled the invitation ${context.targetEmail} to join the workspace`;
 
       // Default fallback
       default:
-        return `${username} performed an action: ${action}`;
+        return `${email} performed an action: ${action}`;
     }
   }
 }
