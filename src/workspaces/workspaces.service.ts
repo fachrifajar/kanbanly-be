@@ -14,6 +14,7 @@ import {
   User,
   ActivityType,
   Workspace,
+  WorkspaceMember,
 } from '@prisma/client';
 import { ActivitiesService } from 'src/activities/activities.service';
 import { buildFieldDiffDeep } from 'src/common/utils/diff.utils';
@@ -86,9 +87,9 @@ export class WorkspacesService {
           workspaceName: newWorkspace.name,
         },
         metadata: {
-          name: newWorkspace.name,
+          workspaceName: newWorkspace.name,
           description: newWorkspace.description,
-          id: newWorkspace.id,
+          workspaceId: newWorkspace.id,
         },
         tx,
       });
@@ -171,38 +172,36 @@ export class WorkspacesService {
           },
         },
       },
-      orderBy: {
-        workspace: {
-          createdAt: 'asc',
-        },
-      },
     });
 
-    return memberships.map((membership) => ({
+    const formattedWorkspaces = memberships.map((membership) => ({
       ...membership.workspace,
-      role: membership.role,
-    }));
-  }
 
-  async findAllCreatedByUser(creatorId: string) {
-    return this.prisma.workspace.findMany({
-      where: {
-        members: {
-          some: {
-            userId: creatorId,
-            role: WorkspaceRole.OWNER,
-          },
-        },
-      },
-      include: {
-        _count: {
-          select: { members: true },
-        },
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
+      userRole: membership.role,
+      isOwner: membership.role === WorkspaceRole.OWNER,
+    }));
+
+    // 3. Lakukan sorting kustom di sini
+    // Definisikan urutan prioritas peran
+    const roleOrder = {
+      [WorkspaceRole.OWNER]: 1,
+      [WorkspaceRole.ADMIN]: 2,
+      [WorkspaceRole.MEMBER]: 3,
+      [WorkspaceRole.VIEWER]: 4,
+    };
+
+    formattedWorkspaces.sort((a, b) => {
+      // Sortir pertama berdasarkan prioritas peran (OWNER paling atas)
+      const roleComparison = roleOrder[a.userRole] - roleOrder[b.userRole];
+      if (roleComparison !== 0) {
+        return roleComparison;
+      }
+
+      // Jika perannya sama, sortir berdasarkan tanggal dibuat (terbaru paling atas)
+      return b.createdAt.getTime() - a.createdAt.getTime();
     });
+
+    return formattedWorkspaces;
   }
 
   async findOne(workspaceId: string, userId: string) {
@@ -230,25 +229,36 @@ export class WorkspacesService {
 
   async remove(workspaceId: string, user: User) {
     return this.prisma.$transaction(async (tx) => {
-      await this.validateUserRole(workspaceId, user.id, [WorkspaceRole.OWNER]);
-
-      const workspaceToDelete = await tx.workspace.findUnique({
-        where: { id: workspaceId },
-      });
-      if (!workspaceToDelete)
-        throw new NotFoundException('Workspace not found.');
+      const workspaceToDelete = (await this.validateUserRole(
+        workspaceId,
+        user.id,
+        [WorkspaceRole.OWNER, WorkspaceRole.ADMIN],
+        {
+          selectWorkspace: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+      )) as WorkspaceMember & {
+        workspace: {
+          id: string;
+          name: string;
+          slug: string;
+        };
+      };
 
       await this.activitiesService.log({
         user: user,
         action: ActivityType.WORKSPACE_DELETED,
         context: {
-          workspaceId: workspaceToDelete.id,
-          workspaceName: workspaceToDelete.name,
+          workspaceId: workspaceToDelete?.workspace?.id,
+          workspaceName: workspaceToDelete?.workspace.name,
         },
         metadata: {
-          workspaceId: workspaceToDelete.id,
-          workspaceName: workspaceToDelete.name,
-          workspaceSlug: workspaceToDelete.slug,
+          workspaceId: workspaceToDelete?.workspace?.id,
+          workspaceName: workspaceToDelete?.workspace.name,
+          workspaceSlug: workspaceToDelete?.workspace.slug,
         },
         tx,
       });
@@ -263,7 +273,18 @@ export class WorkspacesService {
     workspaceId: string,
     userId: string,
     allowedRoles: WorkspaceRole[],
+    options?: {
+      selectWorkspace?: Record<string, boolean>;
+    },
   ) {
+    const include = options?.selectWorkspace
+      ? {
+          workspace: {
+            select: options.selectWorkspace,
+          },
+        }
+      : undefined;
+
     const member = await this.prisma.workspaceMember.findUnique({
       where: {
         userId_workspaceId: {
@@ -271,10 +292,13 @@ export class WorkspacesService {
           workspaceId,
         },
       },
+      include,
     });
 
     if (!member) {
-      throw new NotFoundException('You are not a member of this workspace.');
+      throw new NotFoundException(
+        'You are not a member of this workspace or it does not exist.',
+      );
     }
 
     if (!allowedRoles.includes(member.role)) {
