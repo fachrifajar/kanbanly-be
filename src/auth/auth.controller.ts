@@ -77,14 +77,30 @@ export class AuthController {
 
     const expiresInMs = parseTimeStringToMs(expiresInString);
 
+    res.cookie('access_token', result.accessToken, {
+      httpOnly: true,
+      // secure: process.env.NODE_ENV === 'production',
+      secure: true,
+      // sameSite: 'lax',
+      sameSite: 'none',
+      path: '/',
+      expires: new Date(Date.now() + 15 * 60 * 1000),
+    });
+
     res.cookie('refresh_token', result.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      // secure: process.env.NODE_ENV === 'production',
+      secure: true,
+      // sameSite: 'lax',
+      sameSite: 'none',
+      path: '/',
       expires: new Date(Date.now() + expiresInMs),
     });
 
-    return { accessToken: result.accessToken, user: result.user };
+    return {
+      // accessToken: result.accessToken,
+      user: result.user,
+    };
   }
 
   @UseGuards(JwtRefreshGuard)
@@ -111,6 +127,13 @@ export class AuthController {
 
     const expiresInMs = parseTimeStringToMs(expiresInString);
 
+    res.cookie('access_token', result.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      expires: new Date(Date.now() + 15 * 60 * 1000),
+    });
+
     res.cookie('refresh_token', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -118,7 +141,7 @@ export class AuthController {
       expires: new Date(Date.now() + expiresInMs),
     });
 
-    return { accessToken: result.accessToken };
+    return;
   }
 
   @UseGuards(JwtRefreshGuard)
@@ -130,6 +153,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     await this.authService.logout(userId);
+    res.clearCookie('access_token');
     res.clearCookie('refresh_token');
     return {};
   }

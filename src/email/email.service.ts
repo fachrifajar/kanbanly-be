@@ -42,12 +42,12 @@ export class EmailService implements OnModuleInit {
   async sendUserVerificationEmail(user: User, token: string) {
     this.ensureTransporterInitialized();
 
-    const verificationUrl = `http://localhost:3000/api/auth/verify-email?token=${token}`;
+    const verificationUrl = `http://localhost:3000/verify?register_token=${token}`;
     const mailOptions = {
       from: `"Kanbanly" <${this.fromEmail}>`,
       to: user.email,
       subject: 'Welcome! Please Verify Your Email',
-      html: `<p>Hello ${user.username},</p><p>Please verify your email by clicking this link: <a href="${verificationUrl}">${verificationUrl}</a></p>`,
+      html: `<p>Hello ${user.username},</p><p>Please verify your email by clicking this link: <a href="${verificationUrl}">Verify Email</a></p>`,
     };
 
     await this.send(mailOptions);

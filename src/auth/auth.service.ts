@@ -77,15 +77,15 @@ export class AuthService {
     const user = await this.prismaService.user.findFirst({
       where: { emailVerificationToken: token },
     });
-
+    // user not found
     if (!user) {
       throw new BadRequestException('Invalid verification token.');
     }
-
+    // token already used
     if (!user.emailVerificationExpiresAt) {
       throw new BadRequestException('Invalid token state.');
     }
-
+    // token expired
     if (new Date() > user.emailVerificationExpiresAt) {
       throw new BadRequestException('Verification token has expired.');
     }

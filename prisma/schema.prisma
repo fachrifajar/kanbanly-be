@@ -173,23 +173,23 @@ model WorkspaceMember {
 
 // Tracks invitations sent to users to join a workspace.
 model WorkspaceInvitation {
-  id          String @id @default(cuid())
+  id          String        @id @default(cuid())
   email       String
   role        WorkspaceRole @default(MEMBER)
-  token       String @unique
-  isAccepted  Boolean @default(false)
-  expiresAt   DateTime
-  
-  invitedById String?
+  token       String        @unique
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  invitedById String?
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   workspaceId String
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  // Prevents sending duplicate invitations to the same email for the same workspace.
   @@index([email, workspaceId])
+  @@index([email])
   @@index([token])
   @@index([workspaceId])
   @@index([expiresAt])
@@ -479,6 +479,13 @@ enum WorkspaceRole {
   VIEWER
 }
 
+enum InvitationStatus {
+  PENDING    
+  CONSUMED   
+  EXPIRED    
+  CANCELLED
+}
+
 enum BoardVisibility {
   WORKSPACE
   PRIVATE
@@ -523,6 +530,10 @@ enum ActivityType {
   LABEL_ASSIGNED
   LABEL_UNASSIGNED
   
+  INVITATION_SENT
+  INVITATION_REFRESHED
+  INVITATION_CANCELED
+
   MEMBER_ADDED
   MEMBER_REMOVED
   MEMBER_ROLE_CHANGED

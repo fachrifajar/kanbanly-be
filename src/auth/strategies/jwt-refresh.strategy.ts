@@ -4,6 +4,12 @@ import { Request } from 'express';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+const cookieExtractor = (req: Request): string | null => {
+  return typeof req?.cookies?.refresh_token === 'string'
+    ? req.cookies.refresh_token
+    : null;
+};
+
 @Injectable()
 export class JwtRefreshStrategy extends PassportStrategy(
   Strategy,
@@ -11,13 +17,14 @@ export class JwtRefreshStrategy extends PassportStrategy(
 ) {
   constructor(configService: ConfigService) {
     super({
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        (req: Request): string | null => {
-          return typeof req?.cookies?.refresh_token === 'string'
-            ? req.cookies.refresh_token
-            : null;
-        },
-      ]),
+      // jwtFromRequest: ExtractJwt.fromExtractors([
+      //   (req: Request): string | null => {
+      //     return typeof req?.cookies?.refresh_token === 'string'
+      //       ? req.cookies.refresh_token
+      //       : null;
+      //   },
+      // ]),
+      jwtFromRequest: cookieExtractor,
       secretOrKey: configService.get<string>('JWT_REFRESH_TOKEN_SECRET'),
       passReqToCallback: true,
     } as import('passport-jwt').StrategyOptionsWithRequest);
